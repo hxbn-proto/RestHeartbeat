@@ -160,7 +160,7 @@ class PingService : Service() {
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
         val notification = notificationBuilder.setOngoing(true)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_icon_white)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setContentIntent(contentIntent)
                 .setCategory(Notification.CATEGORY_SERVICE)
@@ -243,7 +243,7 @@ class PingService : Service() {
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
         val notification = notificationBuilder.setOngoing(true)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_icon_white)
                 .setContentText(message)
                 .setDefaults(Notification.DEFAULT_SOUND)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
