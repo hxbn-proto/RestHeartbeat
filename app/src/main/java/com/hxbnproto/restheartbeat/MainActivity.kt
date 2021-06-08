@@ -21,9 +21,9 @@ import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
     private lateinit var pingService: PingService
-    private var bound: Boolean = false
     private var timer: AsyncTimer? = null
 
+    // Constants
     private final val DEFAULT_ENDPOINT_URL = "https://jsonplaceholder.typicode.com/todos/1"
 
     //    https://stackoverflow.com/questions/15491894/regex-to-validate-date-format-dd-mm-yyyy
@@ -34,7 +34,8 @@ class MainActivity : AppCompatActivity() {
             "(\\/|-|\\.)(?:(?:0?[1-9])|(?:1[0-2]))\\4(?:(?:1[6-9]|[2-9]\\d)?\\d{2})"
 
     private val TIME_REGEX = "(([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])|(([01]?[0-9]|2[0-3]):[0-5][0-9])"
-    // interface
+
+    // View
     private lateinit var startButton: Button
     private lateinit var resetEndpointButton: ImageButton
     private lateinit var stopButton: Button
@@ -54,7 +55,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var notificationsEnabled: Switch
     private lateinit var requestProgressBar: ProgressBar
 
-    /** Defines callbacks for service binding, passed to bindService()  */
+    // Service binding
+    private var bound: Boolean = false
     private val connection = object : ServiceConnection {
 
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -86,101 +88,33 @@ class MainActivity : AppCompatActivity() {
 
     fun init() {
 
-        startButton = findViewById(R.id.startButton)
-        resetEndpointButton = findViewById(R.id.resetEndpoint)
-        stopButton = findViewById(R.id.stopButton)
-        delayFromTextField = findViewById(R.id.delayFrom)
-        delayToTextField = findViewById(R.id.delayTo)
-        countDownTimer = findViewById(R.id.countDownTimer)
-        status = findViewById(R.id.statusText)
-        startDateTimeText = findViewById(R.id.startDateTime)
-        timeSpentText = findViewById(R.id.timeSpent)
-        requestsCountText = findViewById(R.id.requestCount)
-        endpointUrl = findViewById(R.id.endpointUrl)
-        targetJsonSearch = findViewById(R.id.jsonBody)
-        jsonResponse = findViewById(R.id.response)
-        cyclicRequestsEnabled = findViewById(R.id.cyclicRequestsEnabled)
-        shouldContainDate = findViewById(R.id.isContainDate)
-        shouldContainTime = findViewById(R.id.isContainTime)
-        notificationsEnabled = findViewById(R.id.isNotify)
-        requestProgressBar = findViewById(R.id.requestProgressBar)
+        initView()
 
-        timer = pingService.timer
+        initTimer()
 
-        timer!!.onStart = {
+        initButtonListeners()
 
-            resetCycle()
+        readTextValues()
 
-            runOnUiThread {
+        initSwitchListeners()
 
-                requestProgressBar.setProgress(0, true)
-                countDownTimer.text = "0 s"
+        updateTextFields()
 
-                pingService.statusText = "Running"
-                status.text = pingService.statusText
+        initTextViewListeners()
+    }
 
-                pingService.statusTextColor = Color.parseColor("#ffff8800")
-                status.setTextColor(pingService.statusTextColor)
+    private fun updateTextFields() {
+        jsonResponse.text = pingService.responseText
+        timeSpentText.text = pingService.timeSpent
+        startDateTimeText.text = pingService.startDateText
 
-                pingService.startDateText = LocalDateTime.now()
-                        .format(DateTimeFormatter.ofPattern("dd.MM.yyyy hh:mm:ss"))
-                startDateTimeText.text = pingService.startDateText
+        status.text = pingService.statusText
+        status.setTextColor(pingService.statusTextColor)
 
-                pingService.timeSpent = formatDuration(Duration.ZERO).toString() + "s"
-                timeSpentText.text = pingService.timeSpent
+        requestsCountText.text = pingService.requestsCounter.toString()
+    }
 
-                pingService.requestsCounter = 0
-                requestsCountText.text = pingService.requestsCounter.toString()
-            }
-        }
-
-        timer!!.onTick = {
-            println(it)
-            runOnUiThread {
-                updateCycle(it)
-            }
-        }
-
-        timer!!.onFinish = {
-
-            runOnUiThread {
-                startButton.isEnabled = true
-            }
-        }
-        // buttons and fields
-        if (timer!!.active) {
-            startButton.isEnabled = false
-        }
-
-        startButton.setOnClickListener {
-            startService(Intent(this, PingService::class.java))
-
-            if (!timer!!.active) {
-                it.isEnabled = false
-                timer!!.startTimer()
-            }
-        }
-
-        stopButton.setOnClickListener {
-            stopService(Intent(this, PingService::class.java))
-
-            if (!pingService.found) {
-                pingService.statusText = "Stopped"
-                status.text = pingService.statusText
-
-                pingService.statusTextColor = Color.BLUE
-                status.setTextColor(pingService.statusTextColor)
-            }
-
-            startButton.isEnabled = true
-            timer!!.stopTimer()
-        }
-
-        resetEndpointButton.setOnClickListener {
-            pingService.endpointUrl = DEFAULT_ENDPOINT_URL
-            endpointUrl.text = pingService.endpointUrl
-        }
-
+    private fun readTextValues() {
         // fill up fields when bind
         if (pingService.secondsDelayFrom == 0) {
             pingService.secondsDelayFrom = Integer.parseInt(delayFromTextField.text.toString())
@@ -209,38 +143,9 @@ class MainActivity : AppCompatActivity() {
         if (pingService.timeSpent.isNotBlank()) {
             timeSpentText.text = pingService.timeSpent
         }
+    }
 
-        cyclicRequestsEnabled.setOnCheckedChangeListener(null)
-        cyclicRequestsEnabled.isChecked = pingService.infiniteCycles
-        cyclicRequestsEnabled.setOnCheckedChangeListener { _, isChecked ->
-            pingService.infiniteCycles = isChecked
-        }
-
-        shouldContainDate.setOnCheckedChangeListener(null)
-        shouldContainDate.isChecked = pingService.resultContainsDate
-        shouldContainDate.setOnCheckedChangeListener { _, isChecked ->
-            pingService.resultContainsDate = isChecked
-        }
-
-        shouldContainTime.setOnCheckedChangeListener(null)
-        shouldContainTime.isChecked = pingService.resultContainsTime
-        shouldContainTime.setOnCheckedChangeListener { _, isChecked ->
-            pingService.resultContainsTime = isChecked
-        }
-
-        notificationsEnabled.setOnCheckedChangeListener(null)
-        notificationsEnabled.isChecked = pingService.notificationsEnabled
-        notificationsEnabled.setOnCheckedChangeListener { _, isChecked ->
-            pingService.notificationsEnabled = isChecked
-        }
-
-        jsonResponse.text = pingService.responseText
-        timeSpentText.text = pingService.timeSpent
-        startDateTimeText.text = pingService.startDateText
-        status.text = pingService.statusText
-        status.setTextColor(pingService.statusTextColor)
-        requestsCountText.text = pingService.requestsCounter.toString()
-
+    private fun initTextViewListeners() {
         delayFromTextField.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {}
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -300,6 +205,126 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun initSwitchListeners() {
+        cyclicRequestsEnabled.setOnCheckedChangeListener(null)
+        cyclicRequestsEnabled.isChecked = pingService.infiniteCycles
+        cyclicRequestsEnabled.setOnCheckedChangeListener { _, isChecked ->
+            pingService.infiniteCycles = isChecked
+        }
+
+        shouldContainDate.setOnCheckedChangeListener(null)
+        shouldContainDate.isChecked = pingService.resultContainsDate
+        shouldContainDate.setOnCheckedChangeListener { _, isChecked ->
+            pingService.resultContainsDate = isChecked
+        }
+
+        shouldContainTime.setOnCheckedChangeListener(null)
+        shouldContainTime.isChecked = pingService.resultContainsTime
+        shouldContainTime.setOnCheckedChangeListener { _, isChecked ->
+            pingService.resultContainsTime = isChecked
+        }
+
+        notificationsEnabled.setOnCheckedChangeListener(null)
+        notificationsEnabled.isChecked = pingService.notificationsEnabled
+        notificationsEnabled.setOnCheckedChangeListener { _, isChecked ->
+            pingService.notificationsEnabled = isChecked
+        }
+    }
+
+    private fun initButtonListeners() {
+        startButton.setOnClickListener {
+            startService(Intent(this, PingService::class.java))
+
+            if (!timer!!.active) {
+                it.isEnabled = false
+                timer!!.startTimer()
+            }
+        }
+
+        stopButton.setOnClickListener {
+            stopService(Intent(this, PingService::class.java))
+
+            if (!pingService.found) {
+                setStatus(Status.STOPPED)
+            }
+
+            startButton.isEnabled = true
+            timer!!.stopTimer()
+        }
+
+        resetEndpointButton.setOnClickListener {
+            pingService.endpointUrl = DEFAULT_ENDPOINT_URL
+            endpointUrl.text = pingService.endpointUrl
+        }
+    }
+
+    private fun initView() {
+        startButton = findViewById(R.id.startButton)
+        resetEndpointButton = findViewById(R.id.resetEndpoint)
+        stopButton = findViewById(R.id.stopButton)
+        delayFromTextField = findViewById(R.id.delayFrom)
+        delayToTextField = findViewById(R.id.delayTo)
+        countDownTimer = findViewById(R.id.countDownTimer)
+        status = findViewById(R.id.statusText)
+        startDateTimeText = findViewById(R.id.startDateTime)
+        timeSpentText = findViewById(R.id.timeSpent)
+        requestsCountText = findViewById(R.id.requestCount)
+        endpointUrl = findViewById(R.id.endpointUrl)
+        targetJsonSearch = findViewById(R.id.jsonBody)
+        jsonResponse = findViewById(R.id.response)
+        cyclicRequestsEnabled = findViewById(R.id.cyclicRequestsEnabled)
+        shouldContainDate = findViewById(R.id.isContainDate)
+        shouldContainTime = findViewById(R.id.isContainTime)
+        notificationsEnabled = findViewById(R.id.isNotify)
+        requestProgressBar = findViewById(R.id.requestProgressBar)
+    }
+
+    private fun initTimer() {
+        timer = pingService.timer
+
+        timer!!.onStart = {
+
+            resetCycle()
+
+            runOnUiThread {
+
+                requestProgressBar.setProgress(0, true)
+                countDownTimer.text = "0 s"
+
+                setStatus(Status.RUNNING)
+
+                pingService.startDateText = LocalDateTime.now()
+                        .format(DateTimeFormatter.ofPattern("dd.MM.yyyy hh:mm:ss"))
+                startDateTimeText.text = pingService.startDateText
+
+                pingService.timeSpent = formatDuration(Duration.ZERO).toString() + "s"
+                timeSpentText.text = pingService.timeSpent
+
+                pingService.requestsCounter = 0
+                requestsCountText.text = pingService.requestsCounter.toString()
+            }
+        }
+
+        timer!!.onTick = {
+            println(it)
+            runOnUiThread {
+                updateCycle(it)
+            }
+        }
+
+        timer!!.onFinish = {
+
+            runOnUiThread {
+                startButton.isEnabled = true
+            }
+        }
+
+        // buttons and fields
+        if (timer!!.active) {
+            startButton.isEnabled = false
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         unbindService(connection)
@@ -336,11 +361,8 @@ class MainActivity : AppCompatActivity() {
                     if (!pingService.found) {
                         if (pingService.endpointUrl.isBlank()) {
                             timer!!.stopTimer()
-                            pingService.statusText = "Error: No Endpoint"
-                            status.text = pingService.statusText
 
-                            pingService.statusTextColor = Color.RED
-                            status.setTextColor(pingService.statusTextColor)
+                            setStatus(Status.NO_ENDPOINT)
 
                         } else {
 
@@ -348,28 +370,24 @@ class MainActivity : AppCompatActivity() {
                                 resetCycle()
                             } else {
                                 timer!!.stopTimer()
-                                pingService.statusText = "Not Found :("
-                                status.text = pingService.statusText
 
-                                pingService.statusTextColor = Color.DKGRAY
-                                status.setTextColor(pingService.statusTextColor)
+                                setStatus(Status.NOT_FOUND);
 
                                 if (pingService.notificationsEnabled) {
-                                    pingService.sendNotification("JSON Data unfortunately not found :'(")
+                                    pingService.sendNotification(
+                                            "JSON Data unfortunately not found :'(", NotificationType.BAD)
                                 }
 
                             }
                         }
                     } else {
                         timer!!.stopTimer()
-                        pingService.statusText = "FOUND!"
-                        status.text = pingService.statusText
 
-                        pingService.statusTextColor = Color.parseColor("#ff669900")
-                        status.setTextColor(pingService.statusTextColor)
+                        setStatus(Status.FOUND)
 
                         if (pingService.notificationsEnabled) {
-                            pingService.sendNotification("Found JSON Data!")
+                            pingService.sendNotification(
+                                    "Found JSON Data!", NotificationType.GOOD)
                         }
                     }
                 }
@@ -396,6 +414,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         return false
+    }
+
+    private fun setStatus(newStatus: Status) {
+        pingService.statusText = newStatus.text
+        status.text = pingService.statusText
+
+        pingService.statusTextColor = newStatus.color
+        status.setTextColor(pingService.statusTextColor)
     }
 
     private fun resetCycle() {

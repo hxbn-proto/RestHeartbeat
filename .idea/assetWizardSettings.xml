@@ -19,8 +19,11 @@
                         <option name="values">
                           <map>
                             <entry key="assetSourceType" value="FILE" />
-                            <entry key="outputName" value="ic_icon" />
-                            <entry key="sourceFile" value="D:\Working\Programming\Android\RESTHeartbeat\icon\icon.svg" />
+                            <entry key="height" value="255" />
+                            <entry key="outputName" value="ic_icon_mono" />
+                            <entry key="overrideSize" value="true" />
+                            <entry key="sourceFile" value="D:\Working\Programming\Android\RESTHeartbeat\icon\icon_mono.svg" />
+                            <entry key="width" value="255" />
                           </map>
                         </option>
                       </PersistentState>

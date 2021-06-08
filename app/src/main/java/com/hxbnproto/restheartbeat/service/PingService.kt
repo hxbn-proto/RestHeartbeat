@@ -1,18 +1,24 @@
 package com.hxbnproto.restheartbeat.service
 
 import android.app.*
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.media.AudioAttributes
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.support.annotation.RequiresApi
 import android.support.v4.app.NotificationCompat
 import com.hxbnproto.restheartbeat.MainActivity
+import com.hxbnproto.restheartbeat.NotificationType
 import com.hxbnproto.restheartbeat.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import java.io.*
 import java.net.MalformedURLException
@@ -29,7 +35,8 @@ import javax.net.ssl.X509TrustManager
 class PingService : Service() {
     private val APP_PACKAGE: String = "com.hxbnproto.restheartbeat"
 
-    private var channelId: String = ""
+    private var backgrChannelId: String = ""
+    private var notificationChannelId: String = ""
 
     var startDateText: String = "-"
     var statusText: String = "-"
@@ -146,19 +153,14 @@ class PingService : Service() {
     }
 
     private fun startForeground() {
-        channelId =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    createNotificationChannel("my_service", "My Background Service")
-                } else {
-                    // If earlier version channel ID is not used
-                    // https://developer.android.com/reference/android/support/v4/app/NotificationCompat.Builder.html#NotificationCompat.Builder(android.content.Context)
-                    ""
-                }
+        backgrChannelId = createDefaultNotificationChannel("rest_hb_backgr_service", "RESTHeartbeat Background Service")
+        notificationChannelId = createActiveNotificationChannel(
+                "rest_hb_notif_channel", "RESTHeartbeat Active Notifications")
 
         val notificationIntent = Intent(this, MainActivity::class.java)
         val contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0)
 
-        val notificationBuilder = NotificationCompat.Builder(this, channelId)
+        val notificationBuilder = NotificationCompat.Builder(this, backgrChannelId)
         val notification = notificationBuilder.setOngoing(true)
                 .setSmallIcon(R.drawable.ic_icon_white)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
@@ -169,13 +171,44 @@ class PingService : Service() {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun createNotificationChannel(channelId: String, channelName: String): String {
-        val chan = NotificationChannel(channelId,
-                channelName, NotificationManager.IMPORTANCE_NONE)
+    private fun createDefaultNotificationChannel(channelId: String, channelName: String): String {
+        val chan = NotificationChannel(
+                channelId,
+                channelName,
+                NotificationManager.IMPORTANCE_NONE)
         chan.lightColor = Color.BLUE
         chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         service.createNotificationChannel(chan)
+        return channelId
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun createActiveNotificationChannel(channelId: String, channelName: String): String {
+        val sound: Uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://"
+                + applicationContext.packageName + "/" + R.raw.notification_sound)
+
+        val mChannel = NotificationChannel(
+                channelId,
+                channelName,
+                NotificationManager.IMPORTANCE_HIGH)
+
+        val attributes:AudioAttributes = AudioAttributes
+                .Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+
+        // Configure the notification channel.
+        mChannel.description = channelName
+        mChannel.enableLights(true)
+        mChannel.enableVibration(true)
+        mChannel.setSound(sound, attributes)
+
+        mChannel.lightColor = Color.BLUE
+        mChannel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        service.createNotificationChannel(mChannel)
+
         return channelId
     }
 
@@ -190,7 +223,7 @@ class PingService : Service() {
 
             try {
 
-                val trustAllCerts: Array<TrustManager> = arrayOf<TrustManager>(object : X509TrustManager {
+                val trustAllCerts: Array<TrustManager> = arrayOf(object : X509TrustManager {
 
                     override fun checkClientTrusted(certs: Array<X509Certificate?>?, authType: String?) {}
                     override fun checkServerTrusted(certs: Array<X509Certificate?>?, authType: String?) {}
@@ -204,23 +237,26 @@ class PingService : Service() {
                 HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
 
                 val endpoint = URL(endpointUrl)
-                val tc: URLConnection = endpoint.openConnection()
 
-                var br: BufferedReader
 
-                br = try {
-                    BufferedReader(InputStreamReader(tc.getInputStream()))
-                } catch (e: FileNotFoundException) {
-                    BufferedReader(InputStreamReader((tc as HttpsURLConnection).errorStream))
+                withContext(Dispatchers.IO) {
+                    val bufferedReader: BufferedReader
+
+                    val tc: URLConnection = endpoint.openConnection()
+
+                    bufferedReader = try {
+                        BufferedReader(InputStreamReader(tc.getInputStream()))
+                    } catch (e: FileNotFoundException) {
+                        BufferedReader(InputStreamReader((tc as HttpsURLConnection).errorStream))
+                    }
+                    result = readAll(bufferedReader)
                 }
 
-                result = readAll(br)
-
-            } catch (e: MalformedURLException) { // TODO Auto-generated catch block
+            } catch (e: MalformedURLException) {
                 e.printStackTrace()
-            } catch (e: IOException) { // TODO Auto-generated catch block
+            } catch (e: IOException) {
                 e.printStackTrace()
-            } catch (e: JSONException) { // TODO Auto-generated catch block
+            } catch (e: JSONException) {
                 e.printStackTrace()
             }
 
@@ -229,26 +265,35 @@ class PingService : Service() {
     }
 
     private fun readAll(rd: Reader): String {
-        val sb = java.lang.StringBuilder()
-        var cp: Int
-        while (rd.read().also { cp = it } != -1) {
-            sb.append(cp.toChar())
+        val stringBuilder = java.lang.StringBuilder()
+        var copy: Int
+        while (rd.read().also { copy = it } != -1) {
+            stringBuilder.append(copy.toChar())
         }
-        return sb.toString()
+        return stringBuilder.toString()
     }
 
-    fun sendNotification(message: String) {
+    fun sendNotification(message: String, notificationType: NotificationType) {
         val notificationIntent = Intent(this, MainActivity::class.java)
         val contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0)
 
-        val notificationBuilder = NotificationCompat.Builder(this, channelId)
+//        var soundUri: Uri? = null
+//        if (notificationType == NotificationType.GOOD) {
+//            val soundResId = R.raw.notification_sound
+//            val packageName: String = applicationContext.packageName
+//
+//            soundUri = Uri.parse("android.resource://$packageName/$soundResId")
+//        }
+
+        val notificationBuilder = NotificationCompat.Builder(this, notificationChannelId)
         val notification = notificationBuilder.setOngoing(true)
-                .setSmallIcon(R.drawable.ic_icon_white)
+                .setSmallIcon(notificationType.icon)
                 .setContentText(message)
-                .setDefaults(Notification.DEFAULT_SOUND)
-                .setPriority(NotificationCompat.PRIORITY_MIN)
+//                .setSound(soundUri)
+//                .setDefaults(Notification.DEFAULT_VIBRATE)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(contentIntent)
-                .setCategory(Notification.CATEGORY_SERVICE)
+                .setCategory(Notification.CATEGORY_ALARM)
                 .build()
         startForeground(101, notification)
     }
